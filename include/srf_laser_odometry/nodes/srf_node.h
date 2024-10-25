@@ -33,23 +33,10 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-// #include <mrpt_bridge/pose.h>
 
 // SRF
 #include "srf_laser_odometry/utilities/laser_odometry_refscans.h"
 
-// MRPT related headers
-// #include <mrpt/version.h>
-// #if MRPT_VERSION>=0x130
-// #	include <mrpt/obs/CObservation2DRangeScan.h>
-// #   include <mrpt/obs/CObservationOdometry.h>
-//     using namespace mrpt::obs;
-// #else
-// #	include <mrpt/slam/CObservation2DRangeScan.h>
-// #   include <mrpt/slam/CObservationOdometry.h>
-//     using namespace mrpt::slam;
-// #endif
-// #include <mrpt/poses/CPose3D.h>
 using namespace srf;
 
 class CLaserOdometry2D : public rclcpp::Node
@@ -75,7 +62,6 @@ class CLaserOdometry2D : public rclcpp::Node
     bool is_initialized();
     bool scan_available();
     void init();
-    void odometry_calculation();  // Update odometric pose
     void publish_pose_from_SRF(); // Publishes the last odometric pose with ROS format
 
   protected:
@@ -88,7 +74,6 @@ class CLaserOdometry2D : public rclcpp::Node
     nav_msgs::msg::Odometry initial_robot_pose;
 
     // Subscriptions & Publishers
-    //  Subscriptions & Publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr initPose_sub;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub;

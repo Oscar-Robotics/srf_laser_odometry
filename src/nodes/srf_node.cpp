@@ -23,10 +23,6 @@
 
 #include "srf_laser_odometry/nodes/srf_node.h"
 
-// using namespace mrpt;
-// using namespace mrpt::math;
-// using namespace mrpt::obs;
-// using namespace mrpt::poses;
 using namespace std;
 using namespace Eigen;
 
@@ -128,8 +124,6 @@ void CLaserOdometry2D::init()
 
     // Set laser pose on the robot (through tF)
     //  This allow estimation of the odometry with respect to the robot base reference system.
-    // geomtry_msgs::msg::Pose LaserPoseOnTheRobot;
-    // geometry_msgs::msg::TransformStamped transform;
     geometry_msgs::msg::Transform LaserPoseOnTheRobot;
     try
     {
@@ -144,7 +138,6 @@ void CLaserOdometry2D::init()
 
     // Keep this transform as Eigen Matrix3d
     tf2::Transform transform;
-    // tf2::fromMsg<geometry_msgs::msg::Transform, tf2::Transform>(LaserPoseOnTheRobot, transform);
     transform.setOrigin(tf2::Vector3(LaserPoseOnTheRobot.translation.x, LaserPoseOnTheRobot.translation.y,
                                      LaserPoseOnTheRobot.translation.z));
     transform.setRotation(tf2::Quaternion(LaserPoseOnTheRobot.rotation.x, LaserPoseOnTheRobot.rotation.y,
@@ -164,11 +157,7 @@ void CLaserOdometry2D::init()
     laser_tf_.translation()(2) = t[2];
 
     // Robot initial pose
-    // mrpt::poses::CPose3D robotInitialPose;
-    // geometry_msgs::msg::Pose _src = initial_robot_pose.pose.pose;
-    // mrpt_bridge::convert(_src, robotInitialPose);
     tf2::Transform initial_robot_transform;
-    // tf2::fromMsg<geometry_msgs::msg::Pose, tf2::Transform>(initial_robot_pose.pose.pose, initial_robot_transform);
     auto p = initial_robot_pose.pose.pose;
     initial_robot_transform.setOrigin(tf2::Vector3(p.position.x, p.position.y, p.position.z));
     initial_robot_transform.setRotation(
@@ -187,20 +176,18 @@ void CLaserOdometry2D::init()
     init_pose.translation()(1) = t2[1];
     init_pose.translation()(2) = t2[2];
 
-    // Set the Laser initial pose = Robot_initial_pose + LaserPoseOnTheRobot
-    // srf_obj_.laser_pose = CPose2D(robotInitialPose + LaserPoseOnTheRobot);
-    auto combined_pose = init_pose * laser_tf_;
+
+    auto init_laser_tf = init_pose * laser_tf_;
+
     srf_obj_.laser_pose = Pose2d::Identity();
-    srf_obj_.laser_pose.translation().x() = combined_pose.translation().x();
-    srf_obj_.laser_pose.translation().y() = combined_pose.translation().y();
-    // TODO: Double check this later *******************************************************
-    Eigen::Matrix3d rotation_matrix_3d = combined_pose.rotation();
+    srf_obj_.laser_pose.translation().x() = init_laser_tf.translation().x();
+    srf_obj_.laser_pose.translation().y() = init_laser_tf.translation().y();
+
+    Eigen::Matrix3d rotation_matrix_3d = init_laser_tf.rotation();
     double yaw_angle = std::atan2(rotation_matrix_3d(1, 0), rotation_matrix_3d(0, 0));
     Eigen::Rotation2Df rotation_2d(static_cast<float>(yaw_angle));
-    srf_obj_.laser_pose.linear() = rotation_2d.toRotationMatrix();
 
-    // srf_obj_.laser_pose = init_pose * laser_tf_;
-    // srf_obj_.laser_oldpose = srf_obj_.laser_pose;
+    srf_obj_.laser_pose.linear() = rotation_2d.toRotationMatrix();
 
     module_initialized = true;
     last_odom_time = this->get_clock()->now();
@@ -211,10 +198,6 @@ void CLaserOdometry2D::publish_pose_from_SRF()
 {
     // GET ROBOT POSE from LASER POSE
     //--------------------------------
-    // mrpt::poses::CPose3D LaserPoseOnTheRobot_inv;
-    // tf::StampedTransform transform;
-
-    // Compose Transformations
     auto laser_pose_3d = Pose3d::Identity();
     laser_pose_3d.translation()(0) = srf_obj_.laser_pose.translation().x();
     laser_pose_3d.translation()(1) = srf_obj_.laser_pose.translation().y();
