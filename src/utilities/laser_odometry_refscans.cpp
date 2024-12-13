@@ -47,7 +47,7 @@ void SRF_RefS::initialize(unsigned int size, float FOV_rad, unsigned int odo_met
     method = odo_method;
     cols = size;
     width = size;
-    fovh = FOV_rad * size / (size - 1); // Exact for simulation, but I don't know how the datasets are given...
+    fovh = FOV_rad; //* size / (size - 1); // Exact for simulation, but I don't know how the datasets are given...
     ctf_levels = ceilf(std::log2(cols) - 4.3f);
     iter_irls = 8;
     no_ref_scan = true;
@@ -447,9 +447,9 @@ void SRF_RefS::compute_weights()
     weights_13.fill(0.f);
 
     // Parameters for error_linearization - (kd = 1.f, k2d = 0.02f, ssigma = 100*e-4f works!)
-    const float kd = 0.01f;
-    const float k2d = 2e-4f;
-    const float sensor_sigma = 4e-4f;
+    const float kd = 0.01f;//1.f;//0.01f;
+    const float k2d = 2e-4f;//0.02f;//2e-4f;
+    const float sensor_sigma = 100e-4f;
     //    const float kd = 1.f;
     //    const float k2d = 0.02f; //0.5 no, 0.3 no, 0.1 no, 0.05 no, 0.02 no (better between 0.2 and 0.05)
     //    const float sensor_sigma = 100.f*4e-4f; //100.f*4e-4f, 200 is too much
