@@ -26,6 +26,28 @@
 using namespace std;
 using namespace Eigen;
 
+//-----------------------------------------------------------------------------------
+//                                   UTILS
+//-----------------------------------------------------------------------------------
+template <typename Derived>
+Eigen::Matrix<typename Derived::Scalar, 6, 6> covariance2dTo3d(const Eigen::MatrixBase<Derived> &cov_2d)
+{
+    static_assert(Eigen::MatrixBase<Derived>::RowsAtCompileTime == 3, "Input arg must be of size 3*3");
+    static_assert(Eigen::MatrixBase<Derived>::ColsAtCompileTime == 3, "Input arg must be of size 3*3");
+
+    using T = typename Derived::Scalar;
+
+    Eigen::Matrix<T, 6, 6> cov_3d = Eigen::Matrix<T, 6, 6>::Zero();
+
+    cov_3d.block(0, 0, 2, 2) = cov_2d.block(0, 0, 2, 2);
+    cov_3d.block(0, 5, 2, 1) = cov_2d.block(0, 2, 2, 1);
+    cov_3d.block(5, 0, 1, 2) = cov_2d.block(2, 0, 1, 2);
+
+    cov_3d(5, 5) = cov_2d(2, 2);
+
+    return cov_3d;
+}
+
 // --------------------------
 // CLaserOdometry2D Wrapper
 //---------------------------
@@ -42,6 +64,7 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     this->declare_parameter<int>("laser_decimation", 1);
     this->declare_parameter<double>("laser_min_range", -1.0);
     this->declare_parameter<double>("laser_max_range", -1.0);
+    this->declare_parameter<double>("increment_covariance_threshold", std::numeric_limits<double>::max());
     this->declare_parameter<std::string>("operation_mode",
                                          "HYBRID"); // CS=consecutiveScans, KS=keyScans, HYBRID=threeScansWithKeyScan
 
@@ -54,6 +77,7 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     laser_decimation_ = this->get_parameter("laser_decimation").get_value<int>();
     laser_min_range_ = this->get_parameter("laser_min_range").get_value<double>();
     laser_max_range_ = this->get_parameter("laser_max_range").get_value<double>();
+    increment_covariance_threshold_ = this->get_parameter("increment_covariance_threshold").get_value<double>();
     operation_mode_ = this->get_parameter("operation_mode").get_value<std::string>();
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -156,12 +180,31 @@ void CLaserOdometry2D::init()
     laser_tf_.translation()(1) = t[1];
     laser_tf_.translation()(2) = t[2];
 
-    // Robot initial pose
-    tf2::Transform initial_robot_transform;
-    auto p = initial_robot_pose.pose.pose;
-    initial_robot_transform.setOrigin(tf2::Vector3(p.position.x, p.position.y, p.position.z));
-    initial_robot_transform.setRotation(
-        tf2::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
+    if (!module_initialized)
+    {
+        // Robot initial pose
+        auto p = initial_robot_pose.pose.pose;
+        tf2::Transform initial_robot_transform;
+        initial_robot_transform.setOrigin(tf2::Vector3(p.position.x, p.position.y, p.position.z));
+        initial_robot_transform.setRotation(
+            tf2::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
+        set_laser_pose_from_robot_transform(initial_robot_transform);
+    }
+    else
+    {
+        // Last odometry estimation
+        auto robot_transform_msg = tf_buffer_->lookupTransform(odom_frame_id_, base_frame_id_, tf2::TimePointZero);
+        tf2::Transform robot_transform;
+        tf2::fromMsg(robot_transform_msg.transform, robot_transform);
+        set_laser_pose_from_robot_transform(robot_transform);
+    }
+
+    module_initialized = true;
+    last_odom_time = this->get_clock()->now();
+}
+
+void CLaserOdometry2D::set_laser_pose_from_robot_transform(const tf2::Transform &initial_robot_transform)
+{
     const tf2::Matrix3x3 &basis2 = initial_robot_transform.getBasis();
     Eigen::Matrix3d R2;
 
@@ -176,7 +219,6 @@ void CLaserOdometry2D::init()
     init_pose.translation()(1) = t2[1];
     init_pose.translation()(2) = t2[2];
 
-
     auto init_laser_tf = init_pose * laser_tf_;
 
     srf_obj_.laser_pose = Pose2d::Identity();
@@ -188,10 +230,14 @@ void CLaserOdometry2D::init()
     Eigen::Rotation2Df rotation_2d(static_cast<float>(yaw_angle));
 
     srf_obj_.laser_pose.linear() = rotation_2d.toRotationMatrix();
+    RCLCPP_DEBUG(this->get_logger(), "Laser pose set to: %.3f, %.3f, %.3f", srf_obj_.laser_pose.translation().x(),
+                 srf_obj_.laser_pose.translation().y(), yaw_angle);
+}
 
-    module_initialized = true;
-    last_odom_time = this->get_clock()->now();
-    RCLCPP_INFO(this->get_logger(), "Configuration Done.");
+void CLaserOdometry2D::reset()
+{
+    first_laser_scan = true;
+    laser_counter = 0;
 }
 
 void CLaserOdometry2D::publish_pose_from_SRF()
@@ -203,7 +249,7 @@ void CLaserOdometry2D::publish_pose_from_SRF()
     laser_pose_3d.translation()(1) = srf_obj_.laser_pose.translation().y();
     double yaw = atan2(srf_obj_.laser_pose.rotation().matrix()(1, 0), srf_obj_.laser_pose.rotation().matrix()(0, 0));
     Eigen::Quaterniond quat;
-    quat = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());    
+    quat = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
     laser_pose_3d.linear() = quat.toRotationMatrix();
 
     // Get the robot pose
@@ -220,6 +266,14 @@ void CLaserOdometry2D::publish_pose_from_SRF()
         RCLCPP_WARN(this->get_logger(), "Time increment between Odom estimation is: %.6f sec", time_inc_sec);
     else
     {
+        double cov_odo_2d_diag = srf_obj_.get_increment_covariance().diagonal().sum();
+        if (cov_odo_2d_diag > increment_covariance_threshold_ || cov_odo_2d_diag != cov_odo_2d_diag)
+        {
+            RCLCPP_WARN(this->get_logger(), "Increment covariance is too high: %.6f - resetting", cov_odo_2d_diag);
+            reset();
+            return;
+        }
+
         double lin_speed_x = srf_obj_.kai_loc(0) / time_inc_sec;
         double lin_speed_y = srf_obj_.kai_loc(1) / time_inc_sec;
         double ang_speed = srf_obj_.kai_loc(2) / time_inc_sec;
@@ -256,10 +310,13 @@ void CLaserOdometry2D::publish_pose_from_SRF()
         odom.pose.pose.position.x = robot_pose.translation().x();
         odom.pose.pose.position.y = robot_pose.translation().y();
 
+        auto cov_odo_3d = covariance2dTo3d(srf_obj_.get_increment_covariance());
+
+        std::copy(cov_odo_3d.data(), cov_odo_3d.data() + cov_odo_3d.size(), odom.pose.covariance.begin());
+
         float yaw = atan2(robot_pose.rotation().matrix()(1, 0), robot_pose.rotation().matrix()(0, 0));
         Eigen::Quaternionf quat;
         quat = Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitZ());
-        ;
 
         odom.pose.pose.orientation.z = quat.z();
         odom.pose.pose.orientation.w = quat.w();

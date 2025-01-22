@@ -29,10 +29,10 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 // SRF
 #include "srf_laser_odometry/utilities/laser_odometry_refscans.h"
@@ -47,7 +47,7 @@ class CLaserOdometry2D : public rclcpp::Node
     std::string odom_topic, odom_frame_id_;
     std::string init_pose_from_topic;
     std::string operation_mode_;
-    double laser_min_range_, laser_max_range_;
+    double laser_min_range_, laser_max_range_, increment_covariance_threshold_;
     bool publish_tf_;
     Pose3d robot_pose, robot_oldpose;
     int laser_counter, laser_decimation_;
@@ -62,6 +62,8 @@ class CLaserOdometry2D : public rclcpp::Node
     bool is_initialized();
     bool scan_available();
     void init();
+    void set_laser_pose_from_robot_transform(const tf2::Transform &init_pose);
+    void reset();
     void publish_pose_from_SRF(); // Publishes the last odometric pose with ROS format
 
   protected:
