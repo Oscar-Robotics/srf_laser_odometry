@@ -47,7 +47,7 @@ class CLaserOdometry2D : public rclcpp::Node
     std::string odom_topic, odom_frame_id_;
     std::string init_pose_from_topic;
     std::string operation_mode_;
-    double laser_min_range_, laser_max_range_, increment_covariance_threshold_;
+    double laser_min_range_, laser_max_range_, increment_covariance_threshold_, laser_wrap_around_filter_rad_;
     bool publish_tf_;
     Pose3d robot_pose, robot_oldpose;
     int laser_counter, laser_decimation_;
