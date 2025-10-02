@@ -65,6 +65,7 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     this->declare_parameter<double>("laser_min_range", -1.0);
     this->declare_parameter<double>("laser_max_range", -1.0);
     this->declare_parameter<double>("increment_covariance_threshold", std::numeric_limits<double>::max());
+    this->declare_parameter<double>("laser_wrap_around_filter_rad", 0.0);
     this->declare_parameter<std::string>("operation_mode",
                                          "HYBRID"); // CS=consecutiveScans, KS=keyScans, HYBRID=threeScansWithKeyScan
 
@@ -78,6 +79,7 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     laser_min_range_ = this->get_parameter("laser_min_range").get_value<double>();
     laser_max_range_ = this->get_parameter("laser_max_range").get_value<double>();
     increment_covariance_threshold_ = this->get_parameter("increment_covariance_threshold").get_value<double>();
+    laser_wrap_around_filter_rad_ = this->get_parameter("laser_wrap_around_filter_rad").get_value<double>();
     operation_mode_ = this->get_parameter("operation_mode").get_value<std::string>();
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
@@ -369,8 +371,16 @@ void CLaserOdometry2D::laser_callback(sensor_msgs::msg::LaserScan::ConstSharedPt
                 // copy laser scan to internal srf variable
                 for (unsigned int i = 0; i < last_scan.ranges.size(); i++)
                 {
+                    float angle = last_scan.angle_min + i * last_scan.angle_increment;
                     // Check min-max distances, e.g. to avoid including points of the own robot
                     if ((last_scan.ranges[i] > laser_max_range_) || (last_scan.ranges[i] < laser_min_range_))
+                    {
+                        srf_obj_.range_wf(i) = 0.f; // invalid measurement
+                        last_scan.ranges[i] = 0.0;
+                    }
+                    // Filter laser points near the wrap around region (near -pi and pi)
+                    else if (angle >= (M_PI - laser_wrap_around_filter_rad_) ||
+                             angle <= (-M_PI + laser_wrap_around_filter_rad_))
                     {
                         srf_obj_.range_wf(i) = 0.f; // invalid measurement
                         last_scan.ranges[i] = 0.0;
