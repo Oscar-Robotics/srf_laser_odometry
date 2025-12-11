@@ -60,6 +60,10 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     this->declare_parameter<std::string>("base_frame_id", "/base_link");
     this->declare_parameter<std::string>("odom_topic", "/odom");
     this->declare_parameter<std::string>("odom_frame_id", "/odom");
+    this->declare_parameter<std::string>("ref_odom_topic", "/encoder_odom");
+    this->declare_parameter<double>("ref_odom_min_threshold", 0.1);
+    this->declare_parameter<double>("ref_odom_rel_diff_threshold", 0.8);
+    this->declare_parameter<double>("ref_odom_timeout_s", 0.1);
     this->declare_parameter<std::string>("init_pose_from_topic", "");
     this->declare_parameter<int>("laser_decimation", 1);
     this->declare_parameter<double>("laser_min_range", -1.0);
@@ -74,6 +78,10 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
     base_frame_id_ = this->get_parameter("base_frame_id").get_value<std::string>();
     auto odom_topic = this->get_parameter("odom_topic").get_value<std::string>();
     odom_frame_id_ = this->get_parameter("odom_frame_id").get_value<std::string>();
+    auto ref_odom_topic = this->get_parameter("ref_odom_topic").get_value<std::string>();
+    ref_odom_min_threshold_ = this->get_parameter("ref_odom_min_threshold").get_value<double>();
+    ref_odom_rel_diff_threshold_ = this->get_parameter("ref_odom_rel_diff_threshold").get_value<double>();
+    ref_odom_timeout_s_ = this->get_parameter("ref_odom_timeout_s").get_value<double>();
     auto init_pose_from_topic = this->get_parameter("init_pose_from_topic").get_value<std::string>();
     laser_decimation_ = this->get_parameter("laser_decimation").get_value<int>();
     laser_min_range_ = this->get_parameter("laser_min_range").get_value<double>();
@@ -92,6 +100,8 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
         laser_scan_topic, 1, std::bind(&CLaserOdometry2D::laser_callback, this, std::placeholders::_1));
     odom_pub = this->create_publisher<nav_msgs::msg::Odometry>(odom_topic, 5);
     laser_pub = this->create_publisher<sensor_msgs::msg::LaserScan>("srf_laser_truncated", 5);
+    ref_odom_sub_ = this->create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
+        ref_odom_topic, 10, std::bind(&CLaserOdometry2D::ref_odom_callback, this, std::placeholders::_1));
 
     // init pose
     //----------
@@ -281,6 +291,26 @@ void CLaserOdometry2D::publish_pose_from_SRF()
         double ang_speed = srf_obj_.kai_loc(2) / time_inc_sec;
         robot_oldpose = robot_pose;
 
+        // Ensure SRF velocitity is coherent with reference odometry
+        // If deviation is larger than threshold, reset SRF
+        if (last_ref_odom_msg_ &&
+            (rclcpp::Time(last_odom_time) - last_ref_odom_msg_->header.stamp).seconds() < ref_odom_timeout_s_)
+        {
+            double ref_odom_vel =
+                std::hypot(last_ref_odom_msg_->twist.twist.linear.x, last_ref_odom_msg_->twist.twist.linear.y);
+            double srf_vel = std::hypot(lin_speed_x, lin_speed_y);
+            if (srf_vel / ref_odom_vel < ref_odom_rel_diff_threshold_ && ref_odom_vel > ref_odom_min_threshold_)
+            {
+                RCLCPP_WARN(
+                    this->get_logger(),
+                    "SRF velocity (%.3f m/s) is lower than %.0f%% of reference odom velocity (%.3f m/s). Assuming "
+                    "hallway condition. Resetting.",
+                    srf_vel, ref_odom_rel_diff_threshold_ * 100.0, ref_odom_vel);
+                reset();
+                return;
+            }
+        }
+
         // first, we'll publish the odometry over tf
         //---------------------------------------
         if (publish_tf_)
@@ -407,6 +437,11 @@ void CLaserOdometry2D::laser_callback(sensor_msgs::msg::LaserScan::ConstSharedPt
             }
         }
     }
+}
+
+void CLaserOdometry2D::ref_odom_callback(geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr msg)
+{
+    last_ref_odom_msg_ = msg;
 }
 
 void CLaserOdometry2D::init_pose_callback(nav_msgs::msg::Odometry::ConstSharedPtr new_initPose)
