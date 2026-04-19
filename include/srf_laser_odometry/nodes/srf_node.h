@@ -27,7 +27,6 @@
 #include <stdlib.h>
 
 #include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/twist_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -76,17 +75,17 @@ class CLaserOdometry2D : public rclcpp::Node
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_{nullptr};
     rclcpp::Time last_odom_time;
     nav_msgs::msg::Odometry initial_robot_pose;
-    geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr last_ref_odom_msg_;
+    nav_msgs::msg::Odometry::SharedPtr last_ref_odom_msg_;
 
     // Subscriptions & Publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr initPose_sub;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub;
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr laser_pub;
-    rclcpp::Subscription<geometry_msgs::msg::TwistWithCovarianceStamped>::SharedPtr ref_odom_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr ref_odom_sub_;
 
     // CallBacks
     void laser_callback(sensor_msgs::msg::LaserScan::ConstSharedPtr new_scan);
     void init_pose_callback(nav_msgs::msg::Odometry::ConstSharedPtr new_initPose);
-    void ref_odom_callback(geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr msg);
+    void ref_odom_callback(nav_msgs::msg::Odometry::SharedPtr msg);
 };

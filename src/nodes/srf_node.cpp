@@ -100,7 +100,7 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
         laser_scan_topic, 1, std::bind(&CLaserOdometry2D::laser_callback, this, std::placeholders::_1));
     odom_pub = this->create_publisher<nav_msgs::msg::Odometry>(odom_topic, 5);
     laser_pub = this->create_publisher<sensor_msgs::msg::LaserScan>("srf_laser_truncated", 5);
-    ref_odom_sub_ = this->create_subscription<geometry_msgs::msg::TwistWithCovarianceStamped>(
+    ref_odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
         ref_odom_topic, 10, std::bind(&CLaserOdometry2D::ref_odom_callback, this, std::placeholders::_1));
 
     // init pose
@@ -439,7 +439,7 @@ void CLaserOdometry2D::laser_callback(sensor_msgs::msg::LaserScan::ConstSharedPt
     }
 }
 
-void CLaserOdometry2D::ref_odom_callback(geometry_msgs::msg::TwistWithCovarianceStamped::SharedPtr msg)
+void CLaserOdometry2D::ref_odom_callback(nav_msgs::msg::Odometry::SharedPtr msg)
 {
     last_ref_odom_msg_ = msg;
 }
