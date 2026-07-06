@@ -55,12 +55,12 @@ CLaserOdometry2D::CLaserOdometry2D() : Node("SRF_laser_odom")
 {
     // Read Parameters
     //----------------
-    this->declare_parameter<std::string>("laser_scan_topic", "/laser_scan");
+    this->declare_parameter<std::string>("laser_scan_topic", "laser_scan");
     this->declare_parameter<bool>("publish_tf", true);
     this->declare_parameter<std::string>("base_frame_id", "/base_link");
-    this->declare_parameter<std::string>("odom_topic", "/odom");
+    this->declare_parameter<std::string>("odom_topic", "odom");
     this->declare_parameter<std::string>("odom_frame_id", "/odom");
-    this->declare_parameter<std::string>("ref_odom_topic", "/encoder_odom");
+    this->declare_parameter<std::string>("ref_odom_topic", "encoder_odom");
     this->declare_parameter<double>("ref_odom_min_threshold", 0.1);
     this->declare_parameter<double>("ref_odom_rel_diff_threshold", 0.8);
     this->declare_parameter<double>("ref_odom_timeout_s", 0.1);
